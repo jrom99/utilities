@@ -38,7 +38,9 @@ from typing import Literal, NamedTuple, TYPE_CHECKING
 try:
     from argcomplete import autocomplete
 except ImportError:
-    autocomplete = lambda *_: None
+    def autocomplete(*args):
+        return None
+
 
 if TYPE_CHECKING:
     from Bio.Phylo.BaseTree import Clade, Tree
@@ -79,7 +81,7 @@ def get_consensus(sequences: dict[str, float] | list[str], weighted: bool = Fals
     return "".join(consensus)
 
 
-def get_data(node: Clade, height_property: str, consensus: str, min_value: float):
+def get_data(node: "Clade", height_property: str, consensus: str, min_value: float):
     if isinstance(node, Newick.Clade):
         if node.comment is None:
             raise ValueError("Newick node missing comment")
@@ -103,7 +105,7 @@ def get_data(node: Clade, height_property: str, consensus: str, min_value: float
     return height, consensus
 
 
-def parse_tree(tree: Tree, height_property: str, consensus_type: str, min_consensus: float):
+def parse_tree(tree: "Tree", height_property: str, consensus_type: str, min_consensus: float):
     branches: list[tuple[Clade, Clade]] = []
     tips_consensus: list[str] = []
     heights: dict[Clade, float] = {}
