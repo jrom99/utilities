@@ -33,7 +33,7 @@ import time
 import typing
 from collections import defaultdict
 from datetime import timedelta
-from typing import Literal, NamedTuple, TYPE_CHECKING
+from typing import Literal, NamedTuple
 
 try:
     from argcomplete import autocomplete
@@ -41,9 +41,7 @@ except ImportError:
     def autocomplete(*args):
         return None
 
-
-if TYPE_CHECKING:
-    from Bio.Phylo.BaseTree import Clade, Tree
+from Bio.Phylo.BaseTree import Clade, Tree
 
 
 def parse_comment(comment: str) -> dict[str, list[str]]:
@@ -81,7 +79,7 @@ def get_consensus(sequences: dict[str, float] | list[str], weighted: bool = Fals
     return "".join(consensus)
 
 
-def get_data(node: "Clade", height_property: str, consensus: str, min_value: float):
+def get_data(node: "Clade", height_property: str):
     if isinstance(node, Newick.Clade):
         if node.comment is None:
             raise ValueError("Newick node missing comment")
@@ -98,11 +96,16 @@ def get_data(node: "Clade", height_property: str, consensus: str, min_value: flo
     posteriors = {seq: prob for seq, prob in zip(seqs, seqs_prob)}
 
     height = float(data[height_property][0])
+
+    return height, posteriors
+
+
+def get_single_consensus(posteriors: dict[str, float], consensus: str, min_value: float):
     if consensus in ("weighted", "normal"):
         consensus = get_consensus(posteriors, weighted=(consensus == "weighted"), min_value=min_value)
     else:
         consensus = max(posteriors, key=posteriors.__getitem__)
-    return height, consensus
+    return consensus
 
 
 def parse_tree(tree: "Tree", height_property: str, consensus_type: str, min_consensus: float):
@@ -114,7 +117,9 @@ def parse_tree(tree: "Tree", height_property: str, consensus_type: str, min_cons
     queue = [tree.root]
     while queue:
         node = queue.pop()
-        heights[node], consensus[node] = get_data(node, height_property, consensus_type, min_consensus)
+        heights[node], node_data = get_data(node, height_property)
+        consensus[node] = get_single_consensus(node_data, consensus_type, min_consensus)
+
         if node.is_terminal():
             tips_consensus.append(consensus[node])
 
@@ -130,7 +135,55 @@ def parse_tree(tree: "Tree", height_property: str, consensus_type: str, min_cons
             NodeData(heights[n2], consensus[n2])
         ))
 
-    _, root_consensus = get_data(tree.root, height_property=height_property, consensus=consensus_type, min_value=min_consensus)
+    _, root_data = get_data(tree.root, height_property)
+    root_consensus = get_single_consensus(root_data, consensus_type, min_consensus)
+
+    return tips_consensus, edges, root_consensus
+
+
+def parse_nucleotide_tree(tree: "Tree", height_property: str, consensus_type: str, min_consensus: float):
+    from Bio.Seq import translate
+
+    branches: list[tuple[Clade, Clade]] = []
+    tips_consensus: list[str] = []
+    heights: dict[Clade, float] = {}
+    consensus: dict[Clade, str] = {}
+
+    queue = [tree.root]
+    while queue:
+        node = queue.pop()
+        _, node_data = get_data(node, height_property)
+
+        heights[node], node_data = get_data(node, height_property)
+
+        prot_data = defaultdict(float)
+        for seq, post in node_data.items():
+            prot_data[str(translate(seq))] += post
+
+        consensus[node] = get_single_consensus(prot_data, consensus_type, min_consensus)
+
+        if node.is_terminal():
+            tips_consensus.append(consensus[node])
+
+        queue.extend(node.clades)
+        branches.extend((node, child) for child in node.clades)
+
+    edges: list[tuple[NodeData, NodeData]] = []
+    for n1, n2 in branches:
+        if heights[n1] > heights[n2]:
+            n1, n2 = n2, n1
+        edges.append((
+            NodeData(heights[n1], consensus[n1]),
+            NodeData(heights[n2], consensus[n2])
+        ))
+
+    _, root_data = get_data(tree.root, height_property)
+
+    prot_data: dict[str, float] = defaultdict(float)
+    for seq, post in root_data.items():
+        prot_data[str(translate(seq))] += post
+
+    root_consensus = get_single_consensus(prot_data, consensus_type, min_consensus)
 
     return tips_consensus, edges, root_consensus
 
@@ -198,6 +251,7 @@ def parse_args():
                             - `normal` will use a simple majority rule
                             - `weighted` will rank sequences by their posterior values
                         """))
+    parser.add_argument("--nucleotide", action="store_true", dest="is_nucleotide", help="If the tree data should be translated before analysis (default: %(default)s)")
 
     autocomplete(parser)
     return parser.parse_args(namespace=NameSpace())
@@ -253,6 +307,7 @@ if __name__ == "__main__":
 
     from Bio import Phylo
     from Bio.Phylo import Newick
+    from Bio.Phylo.BaseTree import Tree, Clade
 
     print("Reading tree...")
 
@@ -264,7 +319,10 @@ if __name__ == "__main__":
     t1 = time.perf_counter()
     print(f"Tree read in {timedelta(seconds=t1-t0)}")
 
-    tips_consensus, edges, root_consensus = parse_tree(tree, args.height_property, args.consensus, args.min_consensus)
+    if args.is_nucleotide:
+        tips_consensus, edges, root_consensus = parse_nucleotide_tree(tree, args.height_property, args.consensus, args.min_consensus)
+    else:
+        tips_consensus, edges, root_consensus = parse_tree(tree, args.height_property, args.consensus, args.min_consensus)
 
     START, END = "ROOT", "TIP"
 
