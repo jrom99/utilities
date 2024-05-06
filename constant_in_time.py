@@ -92,7 +92,7 @@ def get_data(node: "Clade", height_property: str):
     key2 = [k for k in data if k.endswith(".set")][0]  # "OROV_L_sequences.set" "OROV_M_seqs.set"
 
     seqs_prob = [*map(float, data[key1][0].strip("'{}").split(","))]
-    seqs = data[key2][0].strip("'{}").replace('\\"', "").split(",")
+    seqs = data[key2][0].strip("'{}").replace('"', "").split(",")
     posteriors = {seq: prob for seq, prob in zip(seqs, seqs_prob)}
 
     height = float(data[height_property][0])
@@ -243,8 +243,8 @@ def parse_args():
 
     parser.add_argument("-f", "--tree-format", choices=["newick", "nexus"], default="nexus", help="Tree file format (default: %(default)s)")
     parser.add_argument("--height", "--height-property", choices=["height", "height_median"], default="height", dest="height_property")
-    parser.add_argument("--min-consensus", type=float, default=100)
-    parser.add_argument("--consensus", choices=["normal", "weighted", "highest_posterior"], default="normal",
+    parser.add_argument("-m", "--min-consensus", type=float, metavar="N", default=100)
+    parser.add_argument("-c", "--consensus", choices=["normal", "weighted", "highest_posterior"], default="normal",
                         help=textwrap.dedent("""\
                         Node consensus algorithm (default: %(default)s)
                             - `highest_posterior` will look at the sequence with the highest posterior value at each node
