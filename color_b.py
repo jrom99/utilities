@@ -32,7 +32,7 @@ _GRADIENTS = {
     "gy": "green_yellow",
     "yg": "yellow_green",
     "gray": "black white",
-    "gray_rev": "white black",    
+    "gray_rev": "white black",
     "blue_green": "blue_green",
     "blue_magenta": "blue_magenta",
     "blue_red": "blue_red",
@@ -97,9 +97,21 @@ _GRADIENTS = {
 
 
 def color_b(selection, gradient="red_white_blue"):
-    """USAGE:
-        color_b selection[, gradient]
     """
+    DESCRIPTION:
+        color_b selection='ca',mode=ramp,gradient=bwr,nbins=30,sat=.5, value=1
+
+    USAGE:
+        color_b selection[, gradient]
+
+    PARAMS:
+        selection (PyMOL selection)
+            name of the PyMOL object to color according to b_factor
+
+        gradient (string; defaults to red_white_blue)
+            name of the gradient
+    """
+
     if gradient not in _GRADIENTS:
         raise KeyError(f"{gradient!s} not found")
     cmd.spectrum("b", _GRADIENTS[gradient], selection)
@@ -109,5 +121,3 @@ cmd.extend("color_b", color_b)
 cmd.color_b = color_b
 cmd.auto_arg[0]['color_b'] = [ cmd.object_sc, 'object', '']
 cmd.auto_arg[1]['color_b'] = [lambda: cmd.Shortcut([*_GRADIENTS]), 'params', '']
-
-
